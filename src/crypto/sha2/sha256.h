@@ -40,7 +40,7 @@ typedef struct
 } sha256_context_t;
 
 void sha256_reset(sha256_context_t *context);
-void sha256_update(sha256_context_t *context, const void *data, size_t size);
+void sha2_sha256_update(sha256_context_t *context, const void *data, size_t size);
 void sha256_finish(sha256_context_t *context, uint8_t *hash);
 
 #ifdef __cplusplus
