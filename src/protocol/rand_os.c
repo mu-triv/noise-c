@@ -65,6 +65,33 @@
  *
  * \note Not part of the public API.
  */
+
+#if defined(RANDOM_MBEDTLS)
+
+#include <sys/time.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+
+void mbedtls_random_bytes(void *p, size_t len)
+{
+  struct timeval tv;
+  gettimeofday(&tv, 0);
+  uint64_t time = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
+  mbedtls_entropy_context entropy;
+  mbedtls_ctr_drbg_context ctr_drbg;
+
+  mbedtls_ctr_drbg_init(&ctr_drbg);
+  mbedtls_entropy_init(&entropy);
+
+  mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const uint8_t *)&time, sizeof(time));
+  mbedtls_ctr_drbg_random(&ctr_drbg, p, len);
+
+  mbedtls_ctr_drbg_free(&ctr_drbg);
+  mbedtls_entropy_free(&entropy);
+}
+#endif
+
 void noise_rand_bytes(void *bytes, size_t size)
 {
 #if defined(RANDOM_DEVICE)
@@ -99,6 +126,9 @@ void noise_rand_bytes(void *bytes, size_t size)
         CryptReleaseContext(provider, 0);
         return;
     }
+#elif defined(RANDOM_MBEDTLS)
+    mbedtls_random_bytes(bytes, size);
+    return;
 #endif
     fprintf(stderr, "Do not know how to generate random numbers!  Abort!\n");
     exit(1);

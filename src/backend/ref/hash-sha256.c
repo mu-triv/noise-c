@@ -39,7 +39,7 @@ static void noise_sha256_reset(NoiseHashState *state)
 static void noise_sha256_update(NoiseHashState *state, const uint8_t *data, size_t len)
 {
     NoiseSHA256State *st = (NoiseSHA256State *)state;
-    sha256_update(&(st->sha256), data, len);
+    sha2_sha256_update(&(st->sha256), data, len);
 }
 
 static void noise_sha256_finalize(NoiseHashState *state, uint8_t *hash)

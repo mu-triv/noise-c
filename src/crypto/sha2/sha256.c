@@ -126,7 +126,7 @@ static void sha256_transform(sha256_context_t *context, const uint8_t *m)
     context->h[7] += h;
 }
 
-void sha256_update(sha256_context_t *context, const void *data, size_t size)
+void sha2_sha256_update(sha256_context_t *context, const void *data, size_t size)
 {
     const uint8_t *d = (const uint8_t *)data;
     while (size > 0) {

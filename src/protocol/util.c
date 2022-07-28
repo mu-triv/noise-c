@@ -26,7 +26,7 @@
 #include <sodium.h>
 typedef crypto_hash_sha256_state sha256_context_t;
 #define sha256_reset(ctx) crypto_hash_sha256_init(ctx)
-#define sha256_update(ctx, pub, pub_len) crypto_hash_sha256_update(ctx, pub, pub_len)
+#define sha2_sha256_update(ctx, pub, pub_len) crypto_hash_sha256_update(ctx, pub, pub_len)
 #define sha256_finish(ctx, hash) crypto_hash_sha256_final(ctx, hash)
 #else
 #include "crypto/sha2/sha256.h"
@@ -275,7 +275,7 @@ int noise_format_fingerprint
 
     /* Hash the public key with SHA256 */
     sha256_reset(&sha256);
-    sha256_update(&sha256, public_key, public_key_len);
+    sha2_sha256_update(&sha256, public_key, public_key_len);
     sha256_finish(&sha256, hash);
     noise_clean(&sha256, sizeof(sha256));
 
