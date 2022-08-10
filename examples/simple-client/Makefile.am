@@ -3,12 +3,12 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 noinst_PROGRAMS = simple-client
 
-echo_client_SOURCES = simple-client.c
+simple_client_SOURCES = simple-client.c
 
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(srcdir)/../echo/echo-server
 AM_CFLAGS = @WARNING_FLAGS@
 
-LDADD = ../../../src/protocol/libnoiseprotocol.a
+LDADD = $(top_srcdir)/src/protocol/libnoiseprotocol.a
 
 if USE_LIBSODIUM
 AM_CPPFLAGS += -DUSE_LIBSODIUM=1

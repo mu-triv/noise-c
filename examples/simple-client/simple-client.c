@@ -41,11 +41,8 @@ static struct option const long_options[] = {
 };
 
 /* Parsed command-line options */
-static const char *client_private_key = NULL;
-static const char *server_public_key = NULL;
-static const char *psk_file = NULL;
 static uint8_t psk[32];
-static const char *protocol = NULL;
+static const char *protocol = "Noise_KK_25519_AESGCM_SHA256";
 static const char *hostname = NULL;
 static int port = 7000;
 static int padding = 0;
@@ -89,20 +86,12 @@ static uint8_t const fixed_ephemeral_newhope[64] = {
 /* Print usage information */
 static void usage(const char *progname)
 {
-    fprintf(stderr, "Usage: %s [options] protocol hostname port\n\n", progname);
+    fprintf(stderr, "Usage: %s [options] hostname port\n\n", progname);
     fprintf(stderr, "Options:\n\n");
-    fprintf(stderr, "    --client-private-key=filename, -c filename\n");
-    fprintf(stderr, "        Name of the file containing the client's private key.\n\n");
-    fprintf(stderr, "    --server-public-key=filename, -s filename\n");
-    fprintf(stderr, "        Name of the file containing the server's public key.\n\n");
-    fprintf(stderr, "    --psk=file, -p file\n");
-    fprintf(stderr, "        Name of the file containing the pre-shared key value.\n\n");
     fprintf(stderr, "    --padding, -g\n");
     fprintf(stderr, "        Pad messages with random data to a uniform size.\n\n");
     fprintf(stderr, "    --verbose, -v\n");
     fprintf(stderr, "        Print all messages to and from the echo server.\n\n");
-    fprintf(stderr, "    --fixed-ephemeral, -f\n");
-    fprintf(stderr, "        Use a fixed local ephemeral key for testing.\n\n");
 }
 
 /* Parse the command-line options */
@@ -113,24 +102,19 @@ static int parse_options(int argc, char *argv[])
     int ch;
     while ((ch = getopt_long(argc, argv, short_options, long_options, &index)) != -1) {
         switch (ch) {
-        case 'c':   client_private_key = optarg; break;
-        case 's':   server_public_key = optarg; break;
-        case 'p':   psk_file = optarg; break;
         case 'g':   padding = 1; break;
         case 'v':   echo_verbose = 1; break;
-        case 'f':   fixed_ephemeral = 1; break;
         default:
             usage(progname);
             return 0;
         }
     }
-    if ((optind + 3) != argc) {
+    if ((optind + 2) != argc) {
         usage(progname);
         return 0;
     }
-    protocol = argv[optind];
-    hostname = argv[optind + 1];
-    port = atoi(argv[optind + 2]);
+    hostname = argv[optind + 0];
+    port = atoi(argv[optind + 1]);
     if (port < 1 || port > 65535) {
         usage(progname);
         return 0;
@@ -157,101 +141,31 @@ static int set_fixed_ephemeral(NoiseDHState *dh)
     }
 }
 
+
+static const char* app_key_packet = "{\"signature\": \"c6dbf5d7c8df34bacce82fee7e86efdb1184b8518e203847fe31dc470919d89de54d5014916c3c83aaaafd55ba0aaed73b1474ca54fcbcf81ed5451da734cd07\", \"app_hash\": \"746869732d617070\", \"app_pubkey\": \"9ba2901502d2bce725a384a7d3d33b8db7c1dd820f4b47954c88330deb491e04\", \"device_id\": \"3465623561303863626133616132333834316433313535393066656536643861\", \"attestation\": {\"user_data\": \"ea698c680d1a3fb7dad99fce281857238f437fd2ed1539a1891f735713c2684c\", \"app_hash\": \"746869732d617070\", \"signature\": \"42e7493f59a19fa59c492c0acefe74bca24976c426199d1731bb6368f7b307b3cc3f1587f52bb19339844aa409bb2381a9b32aad85c9bc41017020acb6d1530b\", \"secure_runtime\": \"5365637572652052756e74696d652076312e312e30\"}}";
+static const uint8_t client_key_25519_priv[] = {0xf8, 0x95, 0x93, 0xd7, 0x25, 0x96, 0x2d, 0x85, 0xa1, 0xdd, 0x7d, 0x36, 0x31, 0x0b, 0x39, 0xa0, 0x59, 0x8d, 0x1b, 0xe4, 0x92, 0xe2, 0x7b, 0x17, 0x14, 0xaf, 0x62, 0xe0, 0xef, 0xa9, 0x99, 0x45};
+static const uint8_t server_key_25519_pub[] = {0xf3, 0x1b, 0x76, 0xd3, 0x8b, 0x22, 0x94, 0xad, 0xe9, 0x9b, 0xac, 0x66, 0x11, 0x5f, 0xeb, 0x55, 0xb9, 0xa7, 0x10, 0xc9, 0x43, 0x1e, 0xf5, 0x81, 0x29, 0x6c, 0x5c, 0x42, 0x73, 0x60, 0x64, 0x26};
+
 /* Initialize the handshake using command-line options */
-static int initialize_handshake
-    (NoiseHandshakeState *handshake, const void *prologue, size_t prologue_len)
+static int initialize_handshake(NoiseHandshakeState *handshake)
 {
     NoiseDHState *dh;
     uint8_t *key = 0;
     size_t key_len = 0;
     int err;
 
-    /* Set the prologue first */
-    err = noise_handshakestate_set_prologue(handshake, prologue, prologue_len);
-    if (err != NOISE_ERROR_NONE) {
-        noise_perror("prologue", err);
-        return 0;
-    }
-
-    /* Set the PSK if one is present.  This will fail if a PSK is not needed.
-       If a PSK is needed but it wasn't provided then the protocol will
-       fail later when noise_handshakestate_start() is called. */
-    if (psk_file && noise_handshakestate_needs_pre_shared_key(handshake)) {
-        if (!echo_load_public_key(psk_file, psk, sizeof(psk)))
-            return 0;
-        err = noise_handshakestate_set_pre_shared_key
-            (handshake, psk, sizeof(psk));
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("psk", err);
-            return 0;
-        }
-    }
-
     /* Set the local keypair for the client */
     if (noise_handshakestate_needs_local_keypair(handshake)) {
-        if (client_private_key) {
-            dh = noise_handshakestate_get_local_keypair_dh(handshake);
-            key_len = noise_dhstate_get_private_key_length(dh);
-            key = (uint8_t *)malloc(key_len);
-            if (!key)
-                return 0;
-            if (!echo_load_private_key(client_private_key, key, key_len)) {
-                noise_free(key, key_len);
-                return 0;
-            }
-            err = noise_dhstate_set_keypair_private(dh, key, key_len);
-            noise_free(key, key_len);
-            if (err != NOISE_ERROR_NONE) {
-                noise_perror("set client private key", err);
-                return 0;
-            }
-        } else {
-            fprintf(stderr, "Client private key required, but not provided.\n");
-            return 0;
-        }
+        dh = noise_handshakestate_get_local_keypair_dh(handshake);
+        err = noise_dhstate_set_keypair_private(dh, client_key_25519_priv, sizeof(client_key_25519_priv));
     }
 
     /* Set the remote public key for the server */
     if (noise_handshakestate_needs_remote_public_key(handshake)) {
-        if (server_public_key) {
-            dh = noise_handshakestate_get_remote_public_key_dh(handshake);
-            key_len = noise_dhstate_get_public_key_length(dh);
-            key = (uint8_t *)malloc(key_len);
-            if (!key)
-                return 0;
-            if (!echo_load_public_key(server_public_key, key, key_len)) {
-                noise_free(key, key_len);
-                return 0;
-            }
-            err = noise_dhstate_set_public_key(dh, key, key_len);
-            noise_free(key, key_len);
-            if (err != NOISE_ERROR_NONE) {
-                noise_perror("set server public key", err);
-                return 0;
-            }
-        } else {
-            fprintf(stderr, "Server public key required, but not provided.\n");
-            return 0;
-        }
+        dh = noise_handshakestate_get_remote_public_key_dh(handshake);
+        err = noise_dhstate_set_public_key(dh, server_key_25519_pub, sizeof(server_key_25519_pub));
     }
 
-    /* Set the fixed local ephemeral value if necessary */
-    if (fixed_ephemeral) {
-        dh = noise_handshakestate_get_fixed_ephemeral_dh(handshake);
-        err = set_fixed_ephemeral(dh);
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("fixed ephemeral value", err);
-            return 0;
-        }
-        dh = noise_handshakestate_get_fixed_hybrid_dh(handshake);
-        err = set_fixed_ephemeral(dh);
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("fixed ephemeral hybrid value", err);
-            return 0;
-        }
-    }
-
-    /* Ready to go */
     return 1;
 }
 
@@ -295,7 +209,7 @@ int main(int argc, char *argv[])
 
     /* Set the handshake options and verify that everything we need
        has been supplied on the command-line. */
-    if (!initialize_handshake(handshake, &id, sizeof(id))) {
+    if (!initialize_handshake(handshake)) {
         noise_handshakestate_free(handshake);
         return 1;
     }
@@ -307,9 +221,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    message[0] = (uint8_t)(strlen(app_key_packet) >> 8);
+    message[1] = (uint8_t)strlen(app_key_packet);
+    memcpy(message + 2, app_key_packet, strlen(app_key_packet));
+    printf("strlen(app_key_packet): %d\n", strlen(app_key_packet));
+
     /* Send the echo protocol identifier to the server */
     ok = 1;
-    if (!echo_send(fd, (const uint8_t *)&id, sizeof(id)))
+    if (!echo_send(fd, message, strlen(app_key_packet) + 2))
         ok = 0;
 
     /* Start the handshake */
@@ -374,87 +293,18 @@ int main(int argc, char *argv[])
         }
     }
 
+    size_t hash_max_len = noise_hashstate_get_max_hash_length();
+    uint8_t *handshake_hash = (uint8_t *)malloc(hash_max_len);
+    err = noise_handshakestate_get_handshake_hash(handshake, handshake_hash, hash_max_len);
+    if (NOISE_ERROR_NONE != err)
+    {
+        noise_perror("noise_handshakestate_get_handshake_hash() failed", err);
+        ok = 0;
+    }
+
     /* We no longer need the HandshakeState */
     noise_handshakestate_free(handshake);
     handshake = 0;
-
-    /* If we will be padding messages, we will need a random number generator */
-    if (ok && padding) {
-        err = noise_randstate_new(&rand);
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("random number generator", err);
-            ok = 0;
-        }
-    }
-
-    /* Tell the user that the handshake has been successful */
-    if (ok) {
-        printf("%s handshake complete.  Enter text to be echoed ...\n", protocol);
-    }
-
-    /* Read lines from stdin, send to the server, and wait for echoes */
-    max_line_len = sizeof(message) - 2 - noise_cipherstate_get_mac_length(send_cipher);
-    while (ok && fgets((char *)(message + 2), max_line_len, stdin)) {
-        /* Pad the message to a uniform size */
-        message_size = strlen((const char *)(message + 2));
-        if (padding) {
-            err = noise_randstate_pad
-                (rand, message + 2, message_size, max_line_len,
-                 NOISE_PADDING_RANDOM);
-            if (err != NOISE_ERROR_NONE) {
-                noise_perror("pad", err);
-                ok = 0;
-                break;
-            }
-            message_size = max_line_len;
-        }
-
-        /* Encrypt the message and send it */
-        noise_buffer_set_inout
-            (mbuf, message + 2, message_size, sizeof(message) - 2);
-        err = noise_cipherstate_encrypt(send_cipher, &mbuf);
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("write", err);
-            ok = 0;
-            break;
-        }
-        message[0] = (uint8_t)(mbuf.size >> 8);
-        message[1] = (uint8_t)mbuf.size;
-        if (!echo_send(fd, message, mbuf.size + 2)) {
-            ok = 0;
-            break;
-        }
-
-        /* Wait for a message from the server */
-        message_size = echo_recv(fd, message, sizeof(message));
-        if (!message_size) {
-            fprintf(stderr, "Remote side terminated the connection\n");
-            ok = 0;
-            break;
-        }
-
-        /* Decrypt the incoming message */
-        noise_buffer_set_input(mbuf, message + 2, message_size - 2);
-        err = noise_cipherstate_decrypt(recv_cipher, &mbuf);
-        if (err != NOISE_ERROR_NONE) {
-            noise_perror("read", err);
-            ok = 0;
-            break;
-        }
-
-        /* Remove padding from the message if necessary */
-        if (padding) {
-            /* Find the first '\n' and strip everything after it */
-            const uint8_t *end = (const uint8_t *)
-                memchr(mbuf.data, '\n', mbuf.size);
-            if (end)
-                mbuf.size = end + 1 - mbuf.data;
-        }
-
-        /* Write the echo to standard output */
-        fputs("Received: ", stdout);
-        fwrite(mbuf.data, 1, mbuf.size, stdout);
-    }
 
     /* Clean up and exit */
     noise_cipherstate_free(send_cipher);

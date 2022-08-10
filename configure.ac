@@ -67,6 +67,7 @@ examples/echo/Makefile
 examples/echo/echo-client/Makefile
 examples/echo/echo-keygen/Makefile
 examples/echo/echo-server/Makefile
+examples/simple-client/Makefile
 doc/Makefile])
 
 AC_ARG_WITH([libsodium],

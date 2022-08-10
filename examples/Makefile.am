@@ -1,2 +1,3 @@
 
-SUBDIRS = echo simple-client
+SUBDIRS = echo
+SUBDIRS += simple-client
