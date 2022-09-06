@@ -46,6 +46,15 @@
 #endif
 #else
 #include <endian.h>
+#if !defined(__LITTLE_ENDIAN)
+#define __LITTLE_ENDIAN   LITTLE_ENDIAN
+#endif
+#if !defined(__BIG_ENDIAN)
+#define __BIG_ENDIAN   BIG_ENDIAN
+#endif
+#if !defined(__BYTE_ORDER)
+#define __BYTE_ORDER   BYTE_ORDER
+#endif
 #endif
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
